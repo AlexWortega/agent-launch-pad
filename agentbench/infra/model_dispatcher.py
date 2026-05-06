@@ -14,6 +14,7 @@ class ModelKey:
     model: str
     key_alias: str
     api_key: str
+    base_url: str | None = None     # if set, overrides openrouter.base_url for this (model, key) slot
     cooldown_until: float = 0.0
 
 
@@ -29,8 +30,13 @@ class ModelDispatcher:
     def from_config(cls, path: str | Path) -> "ModelDispatcher":
         cfg = yaml.safe_load(Path(path).read_text())
         keys = cfg["keys"]
-        chain = [ModelKey(model=c["model"], key_alias=c["key"], api_key=keys[c["key"]]) for c in cfg["chain"]]
-        fallback = [ModelKey(model=c["model"], key_alias=c["key"], api_key=keys[c["key"]]) for c in cfg["fallback_on_quota"]]
+        def mk(c):
+            return ModelKey(
+                model=c["model"], key_alias=c["key"], api_key=keys[c["key"]],
+                base_url=c.get("base_url"),    # optional per-entry override
+            )
+        chain = [mk(c) for c in cfg["chain"]]
+        fallback = [mk(c) for c in cfg["fallback_on_quota"]]
         return cls(primary=chain, fallback=fallback, base_url=cfg["openrouter"]["base_url"])
 
     async def acquire(self, requested_model: str | None = None) -> ModelKey:

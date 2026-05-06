@@ -107,7 +107,9 @@ async def main() -> int:
         else:
             runner = runner_map[cell.agent]
         t0 = time.time()
-        outcome = await runner.run(task, mk, cdir, timeout_s=args.timeout, base_url=base_url, runtime=args.runtime)
+        # Per-model base_url override (e.g. local vLLM, llama.cpp server) wins over global default.
+        effective_base_url = mk.base_url or base_url
+        outcome = await runner.run(task, mk, cdir, timeout_s=args.timeout, base_url=effective_base_url, runtime=args.runtime)
         latency = time.time() - t0
         # Grading: shell-env uses verifier artifacts (reward.txt/ctrf.json).
         # prompt-only falls back to adapter heuristics.
