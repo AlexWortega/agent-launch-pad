@@ -1,0 +1,35 @@
+FROM debian:13-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Common runtime + build deps for benches that compile/run code
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl wget jq git \
+        python3 python3-pip python3-venv \
+        nodejs npm \
+        bash coreutils findutils grep sed gawk \
+        build-essential gcc make \
+        sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv (fast Python pkg manager) — used by terminal-bench's test.sh too
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && ln -s /root/.local/bin/uv  /usr/local/bin/uv \
+    && ln -s /root/.local/bin/uvx /usr/local/bin/uvx
+
+# pi-coding-agent
+RUN npm install -g @mariozechner/pi-coding-agent
+
+# hermes-agent (under uv venv at /opt/hermes-agent/.venv)
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /opt/hermes-agent || \
+    git clone --depth 1 https://github.com/nousresearch/hermes-agent /opt/hermes-agent
+WORKDIR /opt/hermes-agent
+RUN uv venv && \
+    . .venv/bin/activate && \
+    (uv pip install --no-cache-dir -e ".[all]" || uv pip install --no-cache-dir -e .)
+
+ENV PATH="/opt/hermes-agent/.venv/bin:/root/.local/bin:${PATH}"
+ENV PYTHONUNBUFFERED=1
+
+# Default workdir for agents that operate in /app — overridden per-task if needed
+WORKDIR /app

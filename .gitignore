@@ -1,0 +1,26 @@
+# Real config — must never be committed (contains API keys)
+agentbench/config.yaml
+agentbench/config.yaml.private
+agentbench/config.yaml.bak.*
+
+# Run outputs
+agentbench/runs/
+agentbench/.cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Local logs / scratch
+*.log
+/tmp_*

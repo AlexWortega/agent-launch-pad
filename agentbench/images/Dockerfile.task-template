@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1.6
+# Per-task image: task env + pi/hermes agents + tests/instruction.md + entrypoint.
+# Built via build_task_image.py with TASK_ENV_IMAGE arg.
+ARG TASK_ENV_IMAGE
+FROM ${TASK_ENV_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install agent runtime deps. Task env images are typically Debian/Ubuntu;
+# if the underlying image lacks apt-get, build will fail loudly — that's fine,
+# we'll fall back per-image manually for outliers.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl wget jq git gnupg \
+        python3 python3-pip python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 20.x (NodeSource) — pi-coding-agent uses regex /v flag (Node 20+ only)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+# pi-coding-agent (npm global)
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g @mariozechner/pi-coding-agent
+
+# uv (Astral) — needed for pytest bootstrap of terminal-bench tests
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+ && ln -s /root/.local/bin/uv  /usr/local/bin/uv \
+ && ln -s /root/.local/bin/uvx /usr/local/bin/uvx
+
+# hermes-agent in its own venv — kept under /opt to avoid colliding with task env
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent /opt/hermes-agent \
+    || git clone --depth 1 https://github.com/nousresearch/hermes-agent /opt/hermes-agent
+RUN --mount=type=cache,target=/root/.cache/uv \
+    cd /opt/hermes-agent && \
+    uv venv && \
+    (uv pip install --no-cache-dir -e ".[all]" || uv pip install --no-cache-dir -e .)
+
+ENV PATH="/opt/hermes-agent/.venv/bin:/root/.local/bin:${PATH}"
+ENV PYTHONUNBUFFERED=1
+
+# Bench artifacts: instruction prompt + verifier scripts.
+COPY tests/ /tests/
+COPY instruction.md /instruction.md
+
+# Orchestrator hands us env vars: AGENT (pi|hermes), MODEL_ID, OPENROUTER_API_KEY.
+COPY agentbench-entrypoint.sh /agentbench-entrypoint.sh
+RUN chmod +x /agentbench-entrypoint.sh
+
+# Don't override task's WORKDIR — leave whatever the task image set (typically /app).
+ENTRYPOINT ["/agentbench-entrypoint.sh"]

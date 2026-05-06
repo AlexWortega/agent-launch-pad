@@ -1,0 +1,48 @@
+# Copy this file to `config.yaml` and fill in real keys before running.
+# `config.yaml` is git-ignored so secrets never get committed.
+
+keys:
+  # Add as many OpenRouter keys as you have. The dispatcher round-robins per
+  # model across every (model, key) slot that isn't on cooldown — so e.g. 7
+  # keys × 7 free models gives you 7× the per-model RPD of a single key.
+  OR_PRIMARY:    sk-or-v1-REPLACE_WITH_YOUR_PRIMARY_KEY
+  OR_SECONDARY:  sk-or-v1-REPLACE_WITH_YOUR_SECONDARY_KEY
+  # OR_K01:      sk-or-v1-...
+  # OR_K02:      sk-or-v1-...
+
+# Primary chain: each MODEL listed once (drives `--models all`).
+# acquire() does round-robin across ALL key×model slots eligible for the requested model.
+chain:
+  - {model: "openai/gpt-oss-120b:free",                key: OR_PRIMARY}
+  - {model: "z-ai/glm-4.5-air:free",                   key: OR_PRIMARY}
+  - {model: "minimax/minimax-m2.5:free",               key: OR_PRIMARY}
+  - {model: "tencent/hy3-preview:free",                key: OR_PRIMARY}
+  - {model: "inclusionai/ling-2.6-1t:free",            key: OR_PRIMARY}
+  - {model: "poolside/laguna-m.1:free",                key: OR_PRIMARY}
+  - {model: "poolside/laguna-xs.2:free",               key: OR_PRIMARY}
+
+# Fallback (rotated when 429/402/User not found):
+# Same 7 free models on each ADDITIONAL key, then paid models at the bottom.
+fallback_on_quota:
+  - {model: "openai/gpt-oss-120b:free",                key: OR_SECONDARY}
+  - {model: "z-ai/glm-4.5-air:free",                   key: OR_SECONDARY}
+  - {model: "minimax/minimax-m2.5:free",               key: OR_SECONDARY}
+  - {model: "tencent/hy3-preview:free",                key: OR_SECONDARY}
+  - {model: "inclusionai/ling-2.6-1t:free",            key: OR_SECONDARY}
+  - {model: "poolside/laguna-m.1:free",                key: OR_SECONDARY}
+  - {model: "poolside/laguna-xs.2:free",               key: OR_SECONDARY}
+  # Paid (last resort):
+  - {model: "deepseek/deepseek-v4-pro",                key: OR_SECONDARY}
+  - {model: "anthropic/claude-sonnet-4.5",             key: OR_SECONDARY}
+
+openrouter:
+  base_url: "https://openrouter.ai/api/v1"
+
+orchestrator:
+  max_parallel: 16
+  per_task_timeout_s: 900
+  bench_env_startup_timeout_s: 120
+
+paths:
+  runs_root: "./runs"
+  cache_root: "./.cache"
