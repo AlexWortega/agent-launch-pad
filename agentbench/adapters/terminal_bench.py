@@ -85,6 +85,10 @@ class TerminalBenchAdapter(BenchAdapter):
                 continue
             agent_to = int(meta.get("agent", {}).get("timeout_sec", 600))
             verif_to = int(meta.get("verifier", {}).get("timeout_sec", 600))
+            # Most terminal-bench tasks declare 900-12000s; observed reality is
+            # the LLM either solves in 60-300s or times out unproductively.
+            # Cap to 600s — buys back wall-clock from long tails without
+            # losing meaningful trajectories.
             tasks.append(Task(
                 id=slug,
                 bench=self.name,
@@ -94,7 +98,8 @@ class TerminalBenchAdapter(BenchAdapter):
                 cwd="/app",
                 verifier_cmd=["bash", "/tests/test.sh"],
                 reward_path="/logs/verifier/reward.txt",
-                agent_timeout_s=min(agent_to, 900),
-                verifier_timeout_s=min(verif_to, 900),
+                agent_timeout_s=min(agent_to, 600),
+                verifier_timeout_s=min(verif_to, 300),
+                memory_mb=2048,                     # observed peak ~150 MiB
             ))
         return tasks

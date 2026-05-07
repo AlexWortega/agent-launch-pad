@@ -57,6 +57,8 @@ class ShellEnvRunner(AgentRunner):
             "OPENROUTER_BASE_URL": base_url,
             "WORK": "/work",
         }
+        if task.verifier_cwd:
+            env["VERIFIER_CWD"] = task.verifier_cwd
         binds = {str(work_dir.resolve()): "/work"}
         # Inject any per-task workspace files (e.g. data not baked into image)
         for ctr_path, host_path in (task.workspace_files or {}).items():
@@ -74,12 +76,22 @@ class ShellEnvRunner(AgentRunner):
         suffix = hashlib.md5(f"{mk.model}|{mk.key_alias}".encode()).hexdigest()[:8]
         container_name = f"{self._agent_env}-{task.bench}-{task.id}-{suffix}"[:60].replace("/", "_").replace(":", "_")
 
+        # Heavier benches (sab) declare memory_mb / cpus via task.toml — pass them through.
+        # `--init=false` skips tini, saves ~50ms per cell. Our entrypoint handles its own
+        # signal handling so we don't need PID 1 reaping.
+        extra_args: list[str] = ["--init=false"]
+        if task.memory_mb:
+            extra_args += ["-m", f"{task.memory_mb}m"]
+        if task.cpus:
+            extra_args += ["--cpus", str(task.cpus)]
+
         rc, stdout, stderr = await run_container(
             task.env_image,
             name=container_name,
             env=env,
             binds=binds,
             runtime=runtime,
+            extra_args=extra_args or None,
             timeout_s=eff_timeout,
         )
 
