@@ -14,9 +14,20 @@ SHIM_BIN="${KATA_PREFIX}/bin/containerd-shim-kata-v2"
 
 # Performance tuning defaults (override via env to disable)
 KATA_DEFAULT_MEMORY="${KATA_DEFAULT_MEMORY:-1024}"   # nominal MiB per VM (virtio-mem hot-plugs more)
-KATA_ENABLE_TEMPLATE="${KATA_ENABLE_TEMPLATE:-true}"   # CoW VM forking from a golden template
+KATA_ENABLE_TEMPLATE="${KATA_ENABLE_TEMPLATE:-true}" # CoW VM forking from a golden template (QEMU only)
 KATA_ENABLE_VIRTIO_MEM="${KATA_ENABLE_VIRTIO_MEM:-true}"  # return unused VM memory to host
-KATA_VM_CACHE_NUMBER="${KATA_VM_CACHE_NUMBER:-8}"    # pre-warmed VM pool size
+KATA_VM_CACHE_NUMBER="${KATA_VM_CACHE_NUMBER:-8}"    # pre-warmed VM pool size (QEMU only)
+KATA_HYPERVISOR="${KATA_HYPERVISOR:-qemu}"           # "qemu" (default, supports templating) | "clh" (cloud-hypervisor, faster cold boot, no templating)
+
+# Pick the right configuration file based on hypervisor choice.
+case "$KATA_HYPERVISOR" in
+    qemu) KATA_CONFIG_SRC="${KATA_PREFIX}/share/defaults/kata-containers/configuration-qemu.toml" ;;
+    clh)  KATA_CONFIG_SRC="${KATA_PREFIX}/share/defaults/kata-containers/configuration-clh.toml"
+          # CLH on Kata 3.x doesn't expose factory/vm_cache; force off.
+          KATA_ENABLE_TEMPLATE=false
+          KATA_VM_CACHE_NUMBER=0 ;;
+    *) echo "[install_kata] ERROR: unknown KATA_HYPERVISOR=$KATA_HYPERVISOR (use qemu or clh)" >&2; exit 1 ;;
+esac
 
 log() { printf '[install_kata] %s\n' "$*"; }
 
@@ -59,13 +70,18 @@ if ! id -nG "$USER" | tr ' ' '\n' | grep -qx kvm; then
     sudo -n usermod -aG kvm "$USER"
 fi
 
-# 6. Performance defaults: edit Kata config BEFORE registering with Docker
+# 6. Performance defaults: pick the right hypervisor config + edit it.
+# KATA_CONFIG points at the active "configuration.toml" symlink; src is the per-hypervisor file.
+if [ -f "$KATA_CONFIG_SRC" ]; then
+    log "selecting hypervisor: ${KATA_HYPERVISOR} (config: $KATA_CONFIG_SRC)"
+    sudo -n ln -sf "$(basename "$KATA_CONFIG_SRC")" "$KATA_CONFIG"
+fi
 if [ -f "$KATA_CONFIG" ]; then
     log "applying performance defaults to $KATA_CONFIG"
     log "  default_memory     = ${KATA_DEFAULT_MEMORY} MiB"
     log "  enable_virtio_mem  = ${KATA_ENABLE_VIRTIO_MEM}"
-    log "  enable_template    = ${KATA_ENABLE_TEMPLATE}"
-    log "  vm_cache_number    = ${KATA_VM_CACHE_NUMBER}"
+    log "  enable_template    = ${KATA_ENABLE_TEMPLATE} (qemu only)"
+    log "  vm_cache_number    = ${KATA_VM_CACHE_NUMBER} (qemu only)"
     sudo -n cp "$KATA_CONFIG" "${KATA_CONFIG}.bak.$(date +%Y%m%d-%H%M%S)"
     sudo -n python3 - "$KATA_CONFIG" "$KATA_DEFAULT_MEMORY" "$KATA_ENABLE_VIRTIO_MEM" "$KATA_ENABLE_TEMPLATE" "$KATA_VM_CACHE_NUMBER" <<'PY'
 import re, sys
@@ -123,5 +139,6 @@ log "  binary:        $KATA_PREFIX/bin/kata-runtime"
 log "  shim:          $SHIM_BIN"
 log "  config:        $KATA_CONFIG"
 log "  use:           docker run --runtime=kata <image>"
+log "  hypervisor:    ${KATA_HYPERVISOR}"
 log "  perf defaults: templating=${KATA_ENABLE_TEMPLATE}, mem=${KATA_DEFAULT_MEMORY}MiB, virtio-mem=${KATA_ENABLE_VIRTIO_MEM}, vm_pool=${KATA_VM_CACHE_NUMBER}"
-log "  override:      KATA_DEFAULT_MEMORY=2048 KATA_ENABLE_TEMPLATE=false bash $0"
+log "  override:      KATA_HYPERVISOR=clh KATA_DEFAULT_MEMORY=2048 KATA_ENABLE_TEMPLATE=false bash $0"
