@@ -39,6 +39,13 @@ else:
               r'\1enable_template = true\nvm_cache_number = 8',
               s, count=1, flags=re.S)
 
+# Templating requires initrd (not rootfs image). Switch image=... -> initrd=... + comment original.
+if re.search(r'^image\s*=', s, re.M) and not re.search(r'^initrd\s*=', s, re.M):
+    initrd_path = "/opt/kata/share/kata-containers/kata-containers-initrd.img"
+    s = re.sub(r'^image\s*=', '# image =', s, count=1, flags=re.M)
+    s = re.sub(r'^# image =',
+              f'initrd = "{initrd_path}"\n# image =', s, count=1, flags=re.M)
+
 with open(path, 'w') as f:
     f.write(s)
 print("patches applied")

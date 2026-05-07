@@ -99,6 +99,12 @@ elif tmpl == 'true':
               rf'\1enable_template = true\nvm_cache_number = {cache}',
               s, count=1, flags=re.S)
 
+# Templating requires initrd (not the default rootfs image). Swap.
+if tmpl == 'true' and re.search(r'^image\s*=', s, re.M) and not re.search(r'^initrd\s*=', s, re.M):
+    initrd = "/opt/kata/share/kata-containers/kata-containers-initrd.img"
+    s = re.sub(r'^image\s*=', '# image =', s, count=1, flags=re.M)
+    s = re.sub(r'^# image =', f'initrd = "{initrd}"\n# image =', s, count=1, flags=re.M)
+
 open(path, 'w').write(s)
 print("kata config patched")
 PY
